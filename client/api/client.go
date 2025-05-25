@@ -17,7 +17,7 @@ func NewClient(baseURL string) *Client {
 	return &Client{BaseURL: baseURL, HTTPClient: http.DefaultClient}
 }
 
-func (c *Client) post(ctx context.Context, path string, reqBody, respBody interface{}) error {
+func (c *Client) Post(ctx context.Context, path string, reqBody, respBody interface{}) error {
 	buf := new(bytes.Buffer)
 	if err := json.NewEncoder(buf).Encode(reqBody); err != nil {
 		return err

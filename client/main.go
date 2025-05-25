@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/my-auth/client/api"
+	myoauth2 "github.com/my-auth/client/oauth2"
+	"golang.org/x/oauth2"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -13,12 +16,25 @@ import (
 )
 
 var (
-	tmpl *template.Template
+	oauthConfig *oauth2.Config
+	tmpl        *template.Template
+	client      *api.Client
 )
 
 func init() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
+
+	oauthConfig = &oauth2.Config{
+		ClientID:     "your-client-id",
+		ClientSecret: "your-client-secret",
+		RedirectURL:  "http://localhost:16666/callback",
+		Scopes:       []string{"read", "write"},
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  "https://example.com/oauth/authorize",
+			TokenURL: "https://example.com/oauth/token",
+		},
+	}
 
 	tmpl = template.Must(template.ParseGlob("templates/*.html"))
 }
@@ -36,6 +52,8 @@ func run() error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleIndex)
+	mux.HandleFunc("/login", handleLogin)
+	mux.HandleFunc("/callback", handleCallback)
 	server := &http.Server{
 		Addr:    ":16666",
 		Handler: mux,
@@ -73,4 +91,18 @@ func handleIndex(w http.ResponseWriter, _ *http.Request) {
 		slog.Error("failed to execute template", "error", err)
 		return
 	}
+}
+
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	state, err := myoauth2.NewState()
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		slog.Error("failed to generate state", "error", err)
+		return
+	}
+	http.Redirect(w, r, oauthConfig.AuthCodeURL(state), http.StatusFound)
+}
+
+func handleCallback(w http.ResponseWriter, r *http.Request) {
+
 }
