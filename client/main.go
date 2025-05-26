@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/my-auth/client/api"
 	myoauth2 "github.com/my-auth/client/oauth2"
 	"golang.org/x/oauth2"
 	"html/template"
@@ -18,7 +17,6 @@ import (
 var (
 	oauthConfig *oauth2.Config
 	tmpl        *template.Template
-	client      *api.Client
 )
 
 func init() {
@@ -26,14 +24,14 @@ func init() {
 	slog.SetDefault(logger)
 
 	oauthConfig = &oauth2.Config{
-		ClientID:     "your-client-id",
-		ClientSecret: "your-client-secret",
-		RedirectURL:  "http://localhost:16666/callback",
-		Scopes:       []string{"read", "write"},
+		ClientID:     os.Getenv("CLIENT_ID"),
+		ClientSecret: os.Getenv("CLIENT_SECRET"),
+		RedirectURL:  os.Getenv("REDIRECT_URL"),
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  "https://example.com/oauth/authorize",
-			TokenURL: "https://example.com/oauth/token",
+			AuthURL:  os.Getenv("AUTH_SERVER_URL") + "/authorize",
+			TokenURL: os.Getenv("AUTH_SERVER_URL") + "/token",
 		},
+		Scopes: []string{"read"},
 	}
 
 	tmpl = template.Must(template.ParseGlob("templates/*.html"))
@@ -100,9 +98,37 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to generate state", "error", err)
 		return
 	}
+
+	slog.Info("redirecting to auth server...")
 	http.Redirect(w, r, oauthConfig.AuthCodeURL(state), http.StatusFound)
 }
 
 func handleCallback(w http.ResponseWriter, r *http.Request) {
+	state := r.URL.Query().Get("state")
+	if state == "" {
+		http.Error(w, "Bad Request: missing state", http.StatusBadRequest)
+		return
+	}
 
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		http.Error(w, "Bad Request: missing code", http.StatusBadRequest)
+		return
+	}
+
+	token, err := oauthConfig.Exchange(context.Background(), code)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		slog.Error("failed to exchange token", "error", err)
+		return
+	}
+
+	slog.Info("login successful")
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := tmpl.ExecuteTemplate(w, "callback.html", token); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		slog.Error("failed to execute template", "error", err)
+		return
+	}
 }
