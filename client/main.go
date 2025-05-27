@@ -99,36 +99,52 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s := myoauth2.GetInMemoryStateStorage()
+	if err := s.Save(state, ""); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		slog.Error("failed to save state", "error", err)
+		return
+	}
+
 	slog.Info("redirecting to auth server...")
 	http.Redirect(w, r, oauthConfig.AuthCodeURL(state), http.StatusFound)
 }
 
+// handle callback from auth server
 func handleCallback(w http.ResponseWriter, r *http.Request) {
-	state := r.URL.Query().Get("state")
-	if state == "" {
+	s := myoauth2.GetInMemoryStateStorage()
+	originalUrl, ok := s.Load(r.URL.Query().Get("state"))
+	if !ok {
 		http.Error(w, "Bad Request: missing state", http.StatusBadRequest)
+		slog.Error("invalid state")
 		return
 	}
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		http.Error(w, "Bad Request: missing code", http.StatusBadRequest)
+		slog.Error("invalid code")
 		return
 	}
 
 	token, err := oauthConfig.Exchange(context.Background(), code)
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		slog.Error("failed to exchange token", "error", err)
+		slog.Error("failed to exchange token")
 		return
 	}
 
-	slog.Info("login successful")
+	http.SetCookie(w, &http.Cookie{
+		Name:     "access_token",
+		Value:    token.AccessToken,
+		Quoted:   false,
+		Path:     "/",
+		Expires:  token.Expiry,
+		MaxAge:   int(token.ExpiresIn),
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmpl.ExecuteTemplate(w, "callback.html", token); err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		slog.Error("failed to execute template", "error", err)
-		return
-	}
+	http.Redirect(w, r, originalUrl, http.StatusFound)
 }
