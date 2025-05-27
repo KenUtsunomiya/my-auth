@@ -15,8 +15,16 @@ type InMemoryStateStorage struct {
 	storage map[string]string
 }
 
-func NewInMemoryStateStorage() *InMemoryStateStorage {
-	return &InMemoryStateStorage{storage: make(map[string]string)}
+var (
+	instance *InMemoryStateStorage
+	once     sync.Once
+)
+
+func GetInMemoryStateStorage() *InMemoryStateStorage {
+	once.Do(func() {
+		instance = &InMemoryStateStorage{storage: make(map[string]string)}
+	})
+	return instance
 }
 
 func (s *InMemoryStateStorage) Load(state string) (string, bool) {
