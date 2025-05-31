@@ -38,7 +38,7 @@ func (s *InMemoryStateStorage) Save(state string, originalUrl string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.storage[state]; exists {
-		return fmt.Errorf("state %s already exists")
+		return fmt.Errorf("state %s already exists", state)
 	}
 	s.storage[state] = originalUrl
 	return nil
